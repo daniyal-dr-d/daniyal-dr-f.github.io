@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Quantum Security Mainframe</title>
+    <!-- Include face-api.js from a CDN -->
+    <script defer src="https://jsdelivr.net"></script>
+    <style>
+        body { background-color: #0d0d0d; color: #ffffff; font-family: 'Courier New', monospace; text-align: center; padding-top: 40px; margin: 0; overflow-x: hidden; }
+        .mainframe { max-width: 600px; margin: 0 auto; background: #161616; padding: 30px; border-radius: 12px; border: 2px solid #333; box-shadow: 0 0 20px rgba(0, 255, 204, 0.1); position: relative; }
+        h1 { color: #00ffcc; font-size: 28px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
+        .status-box { font-size: 20px; color: #ff00ff; margin: 20px 0; font-weight: bold; }
+        input { background: #222; border: 1px solid #555; color: #fff; padding: 10px; font-size: 16px; border-radius: 5px; text-align: center; width: 220px; margin-bottom: 15px; outline: none; }
+        button { background-color: #00ffcc; color: #121212; border: none; padding: 12px 24px; font-size: 14px; font-weight: bold; border-radius: 5px; cursor: pointer; margin: 5px; transition: 0.3s; }
+        button:hover { background-color: #ff00ff; color: white; }
+        .alarm { color: #ff3333; font-weight: bold; animation: blink 0.8s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        
+        /* FACE SCAN UI */
+        #scan-container { position: relative; width: 100%; max-width: 240px; margin: 0 auto 15px; }
+        #preview { width: 100%; border: 2px solid #333; border-radius: 8px; background: #000; }
+        #scan-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        #security-log { background: #000; color: #33ff33; text-align: left; padding: 15px; border-radius: 5px; margin-top: 20px; font-size: 12px; height: 120px; overflow-y: auto; border: 1px solid #333; display: none; }
+        #permission-gate { position: fixed; inset: 0; background: #0a0a0a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .gate-content { padding: 40px; border: 1px solid #00ffcc; border-radius: 20px; background: rgba(0, 255, 204, 0.05); }
+        #admin-gallery { display: none; margin-top: 30px; padding: 20px; border-top: 2px dashed #333; }
+        .video-entry { display: inline-block; margin: 10px; border: 1px solid #444; padding: 10px; background: #1a1a1a; border-radius: 5px; }
+        .video-entry p { font-size: 10px; color: #888; }
+    </style>
+</head>
+<body>
+
+    <div id="permission-gate">
+        <div class="gate-content">
+            <h1 style="color: #ff00ff;">Quantum Face ID</h1>
+            <p>Scanning hardware initialization required. Please allow Camera access.</p>
+            <button id="start-btn">INITIALIZE SCANNER</button>
+        </div>
+    </div>
+
+    <div id="main-site" style="display: none;">
+        <div class="mainframe">
+            <h1>Quantum Mainframe</h1>
+            <div class="status-box" id="system-status">SCANNING FOR FACE...</div>
+            
+            <div id="scan-container">
+                <video id="preview" autoplay playsinline muted></video>
+                <canvas id="scan-overlay"></canvas>
+            </div>
+
+            <div id="auth-zone">
+                <input type="password" id="pass-input" placeholder="Access Code"><br>
+                <button onclick="checkAccess()">ACCESS SYSTEM</button>
+                <button onclick="triggerHackAttempt()" style="background-color: #aa0000; color: white;">BYPASS SCAN</button>
+            </div>
+
+            <div id="security-log"></div>
+        </div>
+
+        <div id="admin-gallery">
+            <h2 style="color: #00ffcc;">INTRUDER ARCHIVE</h2>
+            <div id="video-list"></div>
+        </div>
+    </div>
+
+<script>
+let audioCtx, userStream, mediaRecorder, faceInterval;
+let recordedChunks = [];
+let isAuthorized = false;
+
+const gate = document.getElementById('permission-gate');
+const mainSite = document.getElementById('main-site');
+const startBtn = document.getElementById('start-btn');
+const videoPreview = document.getElementById('preview');
+const canvas = document.getElementById('scan-overlay');
+
+// 1. INITIALIZE SYSTEM & MODELS
+startBtn.addEventListener('click', async () => {
+    try {
+        // Load the face detection models from a public CDN
+        const MODEL_URL = 'https://githubusercontent.com';
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+        ]);
+
+        userStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        gate.style.display = 'none';
+        mainSite.style.display = 'block';
+        videoPreview.srcObject = userStream;
+        
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        startFaceScan();
+    } catch (err) {
+        alert("SCANNER ERROR: Could not load biometric modules.");
+    }
+});
+
+// 2. FACE DETECTION LOGIC
+async function startFaceScan() {
+    const displaySize = { width: videoPreview.offsetWidth, height: videoPreview.offsetHeight };
+    faceapi.matchDimensions(canvas, displaySize);
+
+    faceInterval = setInterval(async () => {
+        if (isAuthorized) return;
+
+        const detections = await faceapi.detectAllFaces(videoPreview, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+        const status = document.getElementById('system-status');
+
+        if (detections.length > 0) {
+            status.innerText = "FACE DETECTED. READY.";
+            status.style.color = "#00ffcc";
+        } else {
+            status.innerText = "NO FACE DETECTED.";
+            status.style.color = "#ff00ff";
+        }
+
+        // Draw detection box on canvas
+        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        faceapi.draw.drawDetections(canvas, resizedDetections);
+    }, 200);
+}
+
+// 3. SECURITY BREACH
+function triggerHackAttempt(reason = "MANUAL BYPASS") {
+    const status = document.getElementById('system-status');
+    const log = document.getElementById('security-log');
+    
+    status.className = "status-box alarm";
+    status.innerText = "🚨 BREACH: " + reason + " 🚨";
+    
+    if (audioCtx) {
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 140;
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.6);
+    }
+
+    log.style.display = "block";
+    log.innerHTML += `[${new Date().toLocaleTimeString()}] ALERT: Intruder recorded.<br>`;
+    startRecording();
+}
+
+function startRecording() {
+    if (!userStream) return;
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(userStream, { mimeType: 'video/webm;codecs=vp8,opus' });
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        saveToGallery(blob);
+    };
+    mediaRecorder.start();
+    setTimeout(() => { if (mediaRecorder.state !== "inactive") mediaRecorder.stop(); }, 4000);
+}
+
+function saveToGallery(blob) {
+    const url = URL.createObjectURL(blob);
+    const container = document.createElement('div');
+    container.className = 'video-entry';
+    container.innerHTML = `<video src="${url}" controls style="width: 150px;"></video><p>${new Date().toLocaleString()}</p>`;
+    document.getElementById('video-list').prepend(container);
+}
+
+// 4. AUTHORIZATION
+function checkAccess() {
+    const input = document.getElementById('pass-input').value;
+    const status = document.getElementById('system-status');
+    
+    if (input === "127091929") {
+        isAuthorized = true;
+        clearInterval(faceInterval);
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        status.className = "status-box";
+        status.style.color = "#00ffcc";
+        status.innerText = "ACCESS GRANTED. WELCOME.";
+        document.getElementById('auth-zone').style.display = "none";
+        document.getElementById('admin-gallery').style.display = "block";
+    } else {
+        triggerHackAttempt("INVALID CODE");
+    }
+}
+</script>
+</body>
+</html>
