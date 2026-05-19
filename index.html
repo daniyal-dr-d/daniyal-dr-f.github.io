@@ -77,8 +77,9 @@ const canvas = document.getElementById('scan-overlay');
 // 1. INITIALIZE SYSTEM & MODELS
 startBtn.addEventListener('click', async () => {
     try {
-        // Load the face detection models from a public CDN
-        const MODEL_URL = 'https://githubusercontent.com';
+        // Updated URL to a more reliable CDN for face-api models
+        const MODEL_URL = 'https://github.io';
+        
         await Promise.all([
             faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
             faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
@@ -92,10 +93,10 @@ startBtn.addEventListener('click', async () => {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         startFaceScan();
     } catch (err) {
-        alert("SCANNER ERROR: Could not load biometric modules.");
+        console.error(err);
+        alert("SCANNER ERROR: Could not load biometric modules. Check your internet connection.");
     }
 });
-
 // 2. FACE DETECTION LOGIC
 async function startFaceScan() {
     const displaySize = { width: videoPreview.offsetWidth, height: videoPreview.offsetHeight };
